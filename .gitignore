@@ -14,11 +14,19 @@
 venv/
 .venv/
 env/
+# Environment variables
+.env
+backend/.env
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+env/
+venv/
+ENV/
 build/
 develop-eggs/
 dist/
@@ -56,6 +64,13 @@ backend/chroma_data/
 # -----------------------------------------------------------------------------
 .idea/
 .vscode/
+# ChromaDB data
+backend/chroma_data/
+chroma_data/
+
+# IDE
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
@@ -80,3 +95,7 @@ temp/
 # -----------------------------------------------------------------------------
 extension/*.zip
 extension/dist/
+# OS
+.DS_Store
+Thumbs.db
+
