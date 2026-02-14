@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Claim Verification Assistant",
+  "version": "1.0.0",
+  "description": "Verify claims with citations. Highlight text and click 'Verify claim' for a verdict.",
+  "permissions": ["contextMenus", "activeTab", "scripting", "storage"],
+  "host_permissions": ["http://localhost:8000/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Verify claim"
+  }
+}
