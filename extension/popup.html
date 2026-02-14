@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Verify claim</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo-container">
+        <div class="logo-3d">
+          <div class="logo-face logo-front">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="logo-face logo-back"></div>
+          <div class="logo-face logo-right"></div>
+          <div class="logo-face logo-left"></div>
+          <div class="logo-face logo-top"></div>
+          <div class="logo-face logo-bottom"></div>
+        </div>
+        <div class="logo-glow"></div>
+      </div>
+      <h1>Claim Verification</h1>
+    </div>
+    
+    <div class="input-section">
+      <div class="input-wrapper">
+        <textarea id="claim" placeholder="Paste or type a claim to verify..."></textarea>
+        <div class="input-border"></div>
+      </div>
+      <div class="actions">
+        <button id="verify" type="button">
+          <span class="button-content">
+            <span class="button-text">Verify claim</span>
+            <span class="button-icon">→</span>
+          </span>
+          <span class="button-loader hidden">
+            <span class="spinner"></span>
+          </span>
+          <span class="button-ripple"></span>
+        </button>
+      </div>
+    </div>
+
+    <div id="status" class="status hidden">
+      <span class="status-icon"></span>
+      <span class="status-text"></span>
+    </div>
+
+    <div id="result" class="result hidden">
+      <div class="result-header">
+        <div id="verdict" class="verdict">
+          <span class="verdict-icon"></span>
+          <span class="verdict-text"></span>
+        </div>
+      </div>
+      <div id="reasoning" class="reasoning"></div>
+      <div id="citations" class="citations"></div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
