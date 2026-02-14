@@ -73,8 +73,15 @@ function showResult(verdict, reasoning, citations) {
   
   resultEl.classList.remove('hidden');
   
-  // Update verdict with proper formatting
-  const verdictClass = verdict.toLowerCase().replace(/\s+/g, '-');
+  // Map API verdict to CSS class (supported, refuted, not-enough, mixed-disputed, unverifiable)
+  const verdictClassMap = {
+    'supported': 'supported',
+    'refuted': 'refuted',
+    'not enough evidence': 'not-enough',
+    'mixed / disputed': 'mixed-disputed',
+    'unverifiable': 'unverifiable'
+  };
+  const verdictClass = verdictClassMap[verdict.toLowerCase()] || 'not-enough';
   if (verdictEl) {
     verdictEl.className = 'verdict ' + verdictClass;
     if (verdictTextEl) {

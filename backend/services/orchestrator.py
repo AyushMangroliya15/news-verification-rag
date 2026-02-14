@@ -1,0 +1,107 @@
+"""
+Orchestrator: run full verification pipeline with agentic loop.
+Gathers evidence from WEB + RAG, evaluates, refines up to max iterations, then forms verdict.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List
+
+from backend.config import AGENTIC_LOOP_MAX_ITER, RAG_TOP_K
+from backend.models import Citation, EvidenceItem
+from backend.services.evidence_evaluator import (
+    attach_stances,
+    has_conflict,
+    is_sufficient,
+)
+from backend.services.rag_agent import retrieve as rag_retrieve
+from backend.services.verdict_former import form_verdict
+from backend.services.web_agent import fetch_evidence as web_fetch_evidence
+
+logger = logging.getLogger(__name__)
+
+
+def _merge_and_dedupe(web_items: List[EvidenceItem], rag_items: List[EvidenceItem]) -> List[EvidenceItem]:
+    """Merge evidence from WEB and RAG, deduplicate by URL."""
+    seen: set[str] = set()
+    out: List[EvidenceItem] = []
+    for item in web_items + rag_items:
+        url = (item.url or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        out.append(item)
+    return out
+
+
+def run_verification(claim: str, claim_id: str | None = None) -> Dict[str, Any]:
+    """
+    Run the full verification pipeline. Returns dict with keys:
+    verdict (str), reasoning (str), citations (list of {title, url, snippet}).
+    On failure returns Not Enough Evidence with safe reasoning.
+    """
+    claim = (claim or "").strip()
+    if not claim:
+        return {
+            "verdict": "Not Enough Evidence",
+            "reasoning": "No claim provided.",
+            "citations": [],
+        }
+
+    evidence: List[EvidenceItem] = []
+    sufficient = False
+    conflict = False
+    top_k = RAG_TOP_K
+    use_current_only = False
+
+    try:
+        for iteration in range(AGENTIC_LOOP_MAX_ITER):
+            # Gather evidence
+            web_items: List[EvidenceItem] = []
+            try:
+                web_items = web_fetch_evidence(claim, num_per_query=5)
+            except Exception as e:
+                logger.warning("WEB agent failed: %s", e)
+
+            rag_items: List[EvidenceItem] = []
+            try:
+                rag_items = rag_retrieve(claim, top_k=top_k, use_current_affairs_only=use_current_only)
+            except Exception as e:
+                logger.warning("RAG agent failed: %s", e)
+
+            evidence = _merge_and_dedupe(web_items, rag_items)
+            if not evidence:
+                if iteration < AGENTIC_LOOP_MAX_ITER - 1:
+                    top_k = min(top_k + 5, 20)
+                    use_current_only = True
+                continue
+
+            attach_stances(claim, evidence)
+            sufficient = is_sufficient(evidence)
+            conflict = has_conflict(evidence, claim)
+
+            if sufficient and not conflict:
+                break
+            # Refine: next iteration use higher top_k or current-affairs only
+            top_k = min(top_k + 5, 20)
+            if iteration + 1 < AGENTIC_LOOP_MAX_ITER:
+                use_current_only = True
+
+        verdict, reasoning, citations = form_verdict(claim, evidence, sufficient, conflict)
+        out: Dict[str, Any] = {
+            "verdict": verdict,
+            "reasoning": reasoning,
+            "citations": [{"title": c.title, "url": c.url, "snippet": c.snippet} for c in citations],
+        }
+        # Flag for HITL when result is ambiguous (conflict or insufficient after max iter)
+        if claim_id and (not sufficient or conflict):
+            out["requires_review"] = True
+            out["claim_id"] = claim_id
+        return out
+    except Exception as e:
+        logger.exception("Verification pipeline failed: %s", e)
+        return {
+            "verdict": "Not Enough Evidence",
+            "reasoning": "Verification could not be completed. Please try again.",
+            "citations": [],
+        }

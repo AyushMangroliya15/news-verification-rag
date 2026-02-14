@@ -701,6 +701,40 @@ h1 {
   }
 }
 
+.verdict.mixed-disputed {
+  color: #f59e0b;
+  border-left: 4px solid #f59e0b;
+}
+
+.verdict.mixed-disputed .verdict-icon {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.1) 100%);
+  border: 2px solid rgba(245, 158, 11, 0.5);
+}
+
+.verdict.mixed-disputed .verdict-icon::after {
+  content: '◐';
+  color: #f59e0b;
+  font-weight: bold;
+  animation: questionMark 0.5s ease 0.6s both;
+}
+
+.verdict.unverifiable {
+  color: #6b7280;
+  border-left: 4px solid #6b7280;
+}
+
+.verdict.unverifiable .verdict-icon {
+  background: linear-gradient(135deg, rgba(107, 114, 128, 0.2) 0%, rgba(107, 114, 128, 0.1) 100%);
+  border: 2px solid rgba(107, 114, 128, 0.5);
+}
+
+.verdict.unverifiable .verdict-icon::after {
+  content: '—';
+  color: #6b7280;
+  font-weight: bold;
+  animation: questionMark 0.5s ease 0.6s both;
+}
+
 .verdict-text {
   flex: 1;
 }
