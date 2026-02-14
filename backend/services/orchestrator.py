@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from backend.config import AGENTIC_LOOP_MAX_ITER, RAG_TOP_K
+from backend.config import AGENTIC_LOOP_MAX_ITER, RAG_TOP_K, RERANK_TOP_K
 from backend.models import Citation, EvidenceItem
 from backend.services.evidence_evaluator import (
     attach_stances,
@@ -15,6 +15,7 @@ from backend.services.evidence_evaluator import (
     is_sufficient,
 )
 from backend.services.rag_agent import retrieve as rag_retrieve
+from backend.services.reranker import rerank as rerank_evidence
 from backend.services.verdict_former import form_verdict
 from backend.services.web_agent import fetch_evidence as web_fetch_evidence
 
@@ -75,6 +76,11 @@ def run_verification(claim: str, claim_id: str | None = None) -> Dict[str, Any]:
                     top_k = min(top_k + 5, 20)
                     use_current_only = True
                 continue
+
+            try:
+                evidence = rerank_evidence(claim, evidence, top_k=RERANK_TOP_K)
+            except Exception as e:
+                logger.warning("Reranker failed: %s; using evidence unchanged.", e)
 
             attach_stances(claim, evidence)
             sufficient = is_sufficient(evidence)
