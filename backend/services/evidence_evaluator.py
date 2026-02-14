@@ -18,6 +18,45 @@ logger = logging.getLogger(__name__)
 StanceLabel = Literal["supports", "refutes", "neutral"]
 
 
+def _extract_stance_array(text: str) -> list | None:
+    """
+    Extract a JSON array of stance labels from LLM response.
+    Handles raw '[...]' or markdown-wrapped (e.g. ```json\\n[...]```).
+    Returns list of strings or None if parsing fails.
+    """
+    if not text or not text.strip():
+        return None
+    s = text.strip()
+    # Strip markdown code block if present
+    if s.startswith("```"):
+        lines = s.split("\n")
+        # Drop first line (```json or ```) and trailing ```
+        if len(lines) > 1:
+            rest = "\n".join(lines[1:])
+            if rest.endswith("```"):
+                rest = rest[:-3].strip()
+            s = rest
+    # Find first '[' and matching ']' to extract array
+    start = s.find("[")
+    if start == -1:
+        return None
+    depth = 0
+    for i, c in enumerate(s[start:], start=start):
+        if c == "[":
+            depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth == 0:
+                try:
+                    arr = json.loads(s[start : i + 1])
+                    if isinstance(arr, list):
+                        return arr
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                return None
+    return None
+
+
 def is_sufficient(
     evidence: List[EvidenceItem],
     min_sources: int | None = None,
@@ -53,9 +92,9 @@ SOURCES (one per line, prefixed by index):
             temperature=0,
         )
         text = (resp.choices[0].message.content or "").strip()
-        # Parse JSON array
-        if text.startswith("["):
-            arr = json.loads(text)
+        # Parse JSON array: accept raw "[...]" or markdown-wrapped (e.g. ```json\n[...]```
+        arr = _extract_stance_array(text)
+        if arr is not None:
             out: List[StanceLabel] = []
             for x in arr:
                 s = (str(x).lower() if x is not None else "").strip()
@@ -67,7 +106,11 @@ SOURCES (one per line, prefixed by index):
             while len(out) < len(items):
                 out.append(STANCE_NEUTRAL)
             return out[: len(items)]
-        # LLM did not return a JSON array
+        # LLM did not return a parseable JSON array (e.g. wrong format or wrapped in markdown)
+        logger.debug(
+            "Stance classification: no JSON array in response (first 200 chars): %s",
+            text[:200],
+        )
         return [STANCE_NEUTRAL] * len(items)
     except Exception as e:
         logger.warning("Stance classification failed: %s", e)
