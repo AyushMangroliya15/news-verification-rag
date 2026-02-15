@@ -31,11 +31,25 @@ def _get_env_int(key: str, default: int) -> int:
         return default
 
 
+def _get_env_bool(key: str, default: bool) -> bool:
+    """Return env value as bool or default. Accepts 1/0, true/false, yes/no (case-insensitive)."""
+    val = _get_env(key)
+    if val is None:
+        return default
+    return val.strip().lower() in ("1", "true", "yes")
+
+
 # API keys
 OPENAI_API_KEY: str | None = _get_env("OPENAI_API_KEY")
 
 # Claim validation
 CLAIM_MAX_LENGTH: int = _get_env_int("CLAIM_MAX_LENGTH", 2000)
+
+# Claim decomposition: LLM extracts sub-claims; min length only skips LLM for trivial input
+DECOMPOSE_ENABLED: bool = _get_env_bool("DECOMPOSE_ENABLED", True)
+DECOMPOSE_MIN_CLAIM_LENGTH: int = _get_env_int("DECOMPOSE_MIN_CLAIM_LENGTH", 20)
+DECOMPOSE_MAX_SUBCLAIMS: int = _get_env_int("DECOMPOSE_MAX_SUBCLAIMS", 5)
+DECOMPOSE_USE_LLM: bool = _get_env_bool("DECOMPOSE_USE_LLM", True)
 
 # RAG
 RAG_TOP_K: int = _get_env_int("RAG_TOP_K", 10)

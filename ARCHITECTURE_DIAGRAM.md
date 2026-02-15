@@ -22,12 +22,20 @@ graph TB
         CI --> NORM
     end
 
+    subgraph "Decomposition"
+        DECOMP[Claim Decomposer]
+    end
+
     subgraph "Orchestrator - Agentic Loop"
         ORCH[Orchestrator]
         MERGE[Merge & Dedupe]
         LOOP{Iteration Loop<br/>Max 3 iterations}
         ORCH --> LOOP
         LOOP --> MERGE
+    end
+
+    subgraph "Aggregation"
+        AGG[Verdict Aggregator]
     end
 
     subgraph "Evidence Gathering"
@@ -76,12 +84,15 @@ graph TB
     end
 
     EP1 --> CI
-    VAL --> ORCH
+    VAL --> DECOMP
+    DECOMP --> ORCH
     LOOP --> WEB
     LOOP --> RAG
     MERGE --> RERANK
     CONFLICT --> VF
     VF --> API
+    ORCH --> AGG
+    AGG --> API
 
     style API fill:#e1f5ff
     style ORCH fill:#fff4e1
@@ -91,6 +102,8 @@ graph TB
     style VF fill:#ffe1f5
     style VS fill:#fff9e1
 ```
+
+**Note:** Decomposition is LLM-based: the Claim Decomposer is asked to extract sub-claims for claims above a small length threshold. When it returns multiple sub-claims, the Orchestrator runs verification for each and the Verdict Aggregator combines results into one response including `sub_results` for the UI. When it returns one sub-claim, the response comes from Verdict Former directly.
 
 ## Evidence Flow Diagram
 

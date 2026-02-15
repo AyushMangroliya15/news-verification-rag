@@ -391,6 +391,101 @@ body {
   content: '?';
 }
 
+.verdict-badge.mixed-disputed {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--color-warning);
+  border: 1px solid rgba(210, 153, 34, 0.3);
+}
+
+.verdict-badge.mixed-disputed .verdict-icon::after {
+  content: '◐';
+}
+
+.verdict-badge.unverifiable {
+  background: rgba(139, 148, 158, 0.15);
+  color: var(--color-text-tertiary);
+  border: 1px solid var(--color-border);
+}
+
+.verdict-badge.unverifiable .verdict-icon::after {
+  content: '—';
+}
+
+/* Sub-results (decomposed claims) */
+.sub-results-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.sub-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sub-claim-card {
+  padding: 12px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.sub-claim-claim {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.sub-claim-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 8px;
+}
+
+.sub-claim-reasoning {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+  margin-bottom: 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--color-border);
+}
+
+.sub-claim-citations {
+  list-style: none;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sub-claim-citations li {
+  padding: 8px;
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+.sub-claim-citations .citation-title {
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.sub-claim-citations .citation-snippet {
+  font-size: 11px;
+}
+
 /* Reasoning Section */
 .reasoning-section,
 .citations-section {

@@ -8,7 +8,10 @@ import logging
 from typing import Any, Dict, List
 
 from backend.config import AGENTIC_LOOP_MAX_ITER, RAG_TOP_K, RERANK_TOP_K
+from backend.constants import Verdict
 from backend.models import Citation, EvidenceItem
+from backend.services.claim_decomposer import decompose_claim
+from backend.services.claim_intake import normalize, validate
 from backend.services.evidence_evaluator import (
     attach_stances,
     has_conflict,
@@ -17,6 +20,7 @@ from backend.services.evidence_evaluator import (
 from backend.services.rag_agent import retrieve as rag_retrieve
 from backend.services.reranker import rerank as rerank_evidence
 from backend.services.verdict_former import form_verdict
+from backend.services.verdict_aggregator import aggregate_verdicts
 from backend.services.web_agent import fetch_evidence as web_fetch_evidence
 
 logger = logging.getLogger(__name__)
@@ -133,7 +137,52 @@ def run_verification(claim: str) -> Dict[str, Any]:
     except Exception as e:
         logger.exception("Verification pipeline failed: %s", e)
         return {
-            "verdict": "Not Enough Evidence",
+            "verdict": Verdict.NOT_ENOUGH_EVIDENCE.value,
             "reasoning": "Verification could not be completed. Please try again.",
             "citations": [],
         }
+
+
+def run_verification_with_decomposition(claim: str) -> Dict[str, Any]:
+    """
+    Entry point: optionally decompose claim into sub-claims, verify each, then aggregate.
+    If decomposition yields a single claim, runs existing run_verification once.
+    Otherwise runs run_verification per sub-claim and returns aggregated verdict, reasoning, citations.
+    """
+    claim = (claim or "").strip()
+    if not claim:
+        return {
+            "verdict": Verdict.NOT_ENOUGH_EVIDENCE.value,
+            "reasoning": "No claim provided.",
+            "citations": [],
+        }
+    sub_claims = decompose_claim(claim)
+    # Single sub-claim always uses single-claim path (no sub_results). Multiple sub-claims go through aggregation.
+    if len(sub_claims) == 1:
+        return run_verification(claim)
+    logger.info("Decomposed into %d sub-claims; running verification for each", len(sub_claims))
+    sub_results: List[Dict[str, Any]] = []
+    for sub in sub_claims:
+        ok, err = validate(sub)
+        if not ok:
+            logger.warning("Sub-claim skipped (validation failed): %s", err)
+            sub_results.append({
+                "verdict": Verdict.NOT_ENOUGH_EVIDENCE.value,
+                "reasoning": err or "Sub-claim could not be verified.",
+                "citations": [],
+            })
+            continue
+        normalized_sub = normalize(sub)
+        try:
+            result = run_verification(normalized_sub)
+            sub_results.append(result)
+        except Exception as e:
+            logger.warning("Sub-claim verification failed: %s", e)
+            sub_results.append({
+                "verdict": Verdict.NOT_ENOUGH_EVIDENCE.value,
+                "reasoning": "Verification could not be completed for this sub-claim.",
+                "citations": [],
+            })
+    aggregated = aggregate_verdicts(sub_results, sub_claims=sub_claims, use_llm_reasoning=True)
+    logger.info("Aggregated %d sub-results to verdict %s", len(sub_results), aggregated.get("verdict"))
+    return aggregated

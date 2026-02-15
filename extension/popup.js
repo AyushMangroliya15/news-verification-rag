@@ -12,6 +12,8 @@ const verdictEl = document.getElementById('verdict');
 const verdictTextEl = verdictEl ? verdictEl.querySelector('.verdict-text') : null;
 const reasoningEl = document.getElementById('reasoning');
 const citationsEl = document.getElementById('citations');
+const subResultsSectionEl = document.getElementById('subResultsSection');
+const subResultsListEl = document.getElementById('subResults');
 const headerClaimEl = document.getElementById('headerClaim');
 const newClaimBtn = document.getElementById('newClaim');
 
@@ -47,17 +49,20 @@ function hideStatus() {
  * @param {string} verdict - The verdict
  * @param {string} reasoning - The reasoning
  * @param {Array} citations - Array of citation objects
+ * @param {Array} [subResults] - Optional array of sub-claim results (when claim was decomposed)
  */
-function saveState(claimText, verdict, reasoning, citations) {
-  chrome.storage.local.set({
-    savedState: {
-      claim: claimText,
-      verdict: verdict,
-      reasoning: reasoning,
-      citations: citations,
-      timestamp: Date.now()
-    }
-  });
+function saveState(claimText, verdict, reasoning, citations, subResults) {
+  const state = {
+    claim: claimText,
+    verdict: verdict,
+    reasoning: reasoning,
+    citations: citations,
+    timestamp: Date.now()
+  };
+  if (subResults && subResults.length > 0) {
+    state.sub_results = subResults;
+  }
+  chrome.storage.local.set({ savedState: state });
 }
 
 /**
@@ -73,8 +78,102 @@ function clearSavedState() {
  */
 function restoreState(state) {
   if (state && state.claim) {
-    showResult(state.verdict, state.reasoning, state.citations, state.claim);
+    showResult(state.verdict, state.reasoning, state.citations, state.claim, state.sub_results);
   }
+}
+
+/** Map API verdict string to CSS class for badge styling. */
+const VERDICT_CLASS_MAP = {
+  'supported': 'supported',
+  'refuted': 'refuted',
+  'not enough evidence': 'not-enough',
+  'mixed / disputed': 'mixed-disputed',
+  'unverifiable': 'unverifiable'
+};
+
+function getVerdictClass(verdict) {
+  return VERDICT_CLASS_MAP[(verdict || '').toLowerCase()] || 'not-enough';
+}
+
+/**
+ * Renders a single citation item into a list element.
+ * @param {Object} c - Citation object with title, url, snippet
+ * @param {number} maxSnippetLen - Max snippet length to show
+ * @returns {HTMLLIElement}
+ */
+function buildCitationItem(c, maxSnippetLen) {
+  const li = document.createElement('li');
+  const titleLink = document.createElement('a');
+  titleLink.href = c.url || '#';
+  titleLink.target = '_blank';
+  titleLink.rel = 'noopener';
+  titleLink.className = 'citation-title';
+  titleLink.textContent = c.title || 'Source';
+  li.appendChild(titleLink);
+  if (c.snippet) {
+    const snippetSpan = document.createElement('span');
+    snippetSpan.className = 'citation-snippet';
+    const snippetText = (c.snippet.length > (maxSnippetLen || 150))
+      ? c.snippet.slice(0, maxSnippetLen) + '…'
+      : c.snippet;
+    snippetSpan.textContent = snippetText;
+    li.appendChild(snippetSpan);
+  }
+  return li;
+}
+
+/**
+ * Renders the sub-results section (breakdown by sub-claim).
+ * @param {Array} subResults - Array of { claim, verdict, reasoning, citations }
+ */
+function renderSubResults(subResults) {
+  if (!subResultsListEl) return;
+  subResultsListEl.innerHTML = '';
+  if (!subResults || subResults.length === 0) {
+    if (subResultsSectionEl) subResultsSectionEl.classList.add('hidden');
+    return;
+  }
+  if (subResultsSectionEl) subResultsSectionEl.classList.remove('hidden');
+
+  subResults.forEach((sr, index) => {
+    const card = document.createElement('div');
+    card.className = 'sub-claim-card';
+
+    const claimSpan = document.createElement('div');
+    claimSpan.className = 'sub-claim-claim';
+    claimSpan.textContent = sr.claim || `Sub-claim ${index + 1}`;
+    card.appendChild(claimSpan);
+
+    const verdictBadge = document.createElement('span');
+    verdictBadge.className = 'sub-claim-verdict verdict-badge ' + getVerdictClass(sr.verdict);
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'verdict-icon';
+    verdictBadge.appendChild(iconSpan);
+    const textSpan = document.createElement('span');
+    textSpan.textContent = sr.verdict || 'Not Enough Evidence';
+    verdictBadge.appendChild(textSpan);
+    card.appendChild(verdictBadge);
+
+    const reasoningDiv = document.createElement('div');
+    reasoningDiv.className = 'sub-claim-reasoning';
+    reasoningDiv.textContent = sr.reasoning || 'No reasoning provided.';
+    card.appendChild(reasoningDiv);
+
+    const citationsList = document.createElement('ul');
+    citationsList.className = 'sub-claim-citations';
+    const citations = sr.citations || [];
+    if (citations.length > 0) {
+      citations.forEach((c) => citationsList.appendChild(buildCitationItem(c, 120)));
+    } else {
+      const li = document.createElement('li');
+      li.className = 'no-citations';
+      li.textContent = 'No citations available.';
+      citationsList.appendChild(li);
+    }
+    card.appendChild(citationsList);
+
+    subResultsListEl.appendChild(card);
+  });
 }
 
 /**
@@ -83,8 +182,9 @@ function restoreState(state) {
  * @param {string} reasoning - The reasoning text
  * @param {Array} citations - Array of citation objects with title, url, snippet
  * @param {string} claimText - The original claim text to display in header
+ * @param {Array} [subResults] - Optional array of sub-claim results (when claim was decomposed)
  */
-function showResult(verdict, reasoning, citations, claimText) {
+function showResult(verdict, reasoning, citations, claimText, subResults) {
   // Hide input phase and show results phase
   if (inputPhaseEl) {
     inputPhaseEl.classList.add('hidden');
@@ -92,27 +192,19 @@ function showResult(verdict, reasoning, citations, claimText) {
   if (resultsPhaseEl) {
     resultsPhaseEl.classList.remove('hidden');
   }
-  
+
   // Show claim in header
   if (headerClaimEl && claimText) {
     headerClaimEl.textContent = claimText;
     headerClaimEl.classList.remove('hidden');
   }
-  
+
   // Show new claim button
   if (newClaimBtn) {
     newClaimBtn.classList.remove('hidden');
   }
-  
-  // Map API verdict to CSS class (supported, refuted, not-enough, mixed-disputed, unverifiable)
-  const verdictClassMap = {
-    'supported': 'supported',
-    'refuted': 'refuted',
-    'not enough evidence': 'not-enough',
-    'mixed / disputed': 'mixed-disputed',
-    'unverifiable': 'unverifiable'
-  };
-  const verdictClass = verdictClassMap[verdict.toLowerCase()] || 'not-enough';
+
+  const verdictClass = getVerdictClass(verdict);
   if (verdictEl) {
     verdictEl.className = 'verdict-badge ' + verdictClass;
     if (verdictTextEl) {
@@ -125,34 +217,14 @@ function showResult(verdict, reasoning, citations, claimText) {
     reasoningEl.textContent = reasoning || 'No reasoning provided.';
   }
 
-  // Clear and rebuild citations
+  // Sub-results (breakdown by sub-claim when decomposition was used)
+  renderSubResults(subResults || []);
+
+  // Clear and rebuild citations (top-level merged list)
   if (citationsEl) {
     citationsEl.innerHTML = '';
-    
     if (citations && citations.length > 0) {
-      citations.forEach((c) => {
-        const li = document.createElement('li');
-        
-        const titleLink = document.createElement('a');
-        titleLink.href = c.url || '#';
-        titleLink.target = '_blank';
-        titleLink.rel = 'noopener';
-        titleLink.className = 'citation-title';
-        titleLink.textContent = c.title || 'Source';
-        li.appendChild(titleLink);
-        
-        if (c.snippet) {
-          const snippetSpan = document.createElement('span');
-          snippetSpan.className = 'citation-snippet';
-          const snippetText = c.snippet.length > 150 
-            ? c.snippet.slice(0, 150) + '…' 
-            : c.snippet;
-          snippetSpan.textContent = snippetText;
-          li.appendChild(snippetSpan);
-        }
-        
-        citationsEl.appendChild(li);
-      });
+      citations.forEach((c) => citationsEl.appendChild(buildCitationItem(c, 150)));
     } else {
       const li = document.createElement('li');
       li.className = 'no-citations';
@@ -160,10 +232,10 @@ function showResult(verdict, reasoning, citations, claimText) {
       citationsEl.appendChild(li);
     }
   }
-  
+
   // Save state to Chrome storage
   if (claimText) {
-    saveState(claimText, verdict, reasoning, citations);
+    saveState(claimText, verdict, reasoning, citations, subResults);
   }
 }
 
@@ -210,6 +282,14 @@ function resetToInitialView() {
   
   // Hide status
   hideStatus();
+
+  // Hide sub-results section when resetting
+  if (subResultsSectionEl) {
+    subResultsSectionEl.classList.add('hidden');
+  }
+  if (subResultsListEl) {
+    subResultsListEl.innerHTML = '';
+  }
 }
 
 /**
@@ -270,7 +350,8 @@ async function verify() {
         data.verdict || 'Not Enough Evidence',
         data.reasoning || '',
         data.citations || [],
-        claimText
+        claimText,
+        data.sub_results
       );
     }, 200);
     

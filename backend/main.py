@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.services.claim_intake import normalize, validate
-from backend.services.orchestrator import run_verification
+from backend.services.orchestrator import run_verification_with_decomposition
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ def verify(request: VerifyRequest):
     claim_hash = hashlib.sha256(claim.encode()).hexdigest()[:16]
     start = time.perf_counter()
     try:
-        result = run_verification(claim)
+        result = run_verification_with_decomposition(claim)
         elapsed = time.perf_counter() - start
         logger.info(
             "verify claim_hash=%s verdict=%s citations=%s elapsed_sec=%.2f",
