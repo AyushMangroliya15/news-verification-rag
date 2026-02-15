@@ -63,7 +63,7 @@ def _merge_and_dedupe(web_items: List[EvidenceItem], rag_items: List[EvidenceIte
     return out
 
 
-def run_verification(claim: str, claim_id: str | None = None) -> Dict[str, Any]:
+def run_verification(claim: str) -> Dict[str, Any]:
     """
     Run the full verification pipeline. Returns dict with keys:
     verdict (str), reasoning (str), citations (list of {title, url, snippet}).
@@ -129,10 +129,6 @@ def run_verification(claim: str, claim_id: str | None = None) -> Dict[str, Any]:
             "reasoning": reasoning,
             "citations": [{"title": c.title, "url": c.url, "snippet": c.snippet} for c in citations],
         }
-        # Flag for HITL when result is ambiguous (conflict or insufficient after max iter)
-        if claim_id and (not sufficient or conflict):
-            out["requires_review"] = True
-            out["claim_id"] = claim_id
         return out
     except Exception as e:
         logger.exception("Verification pipeline failed: %s", e)
