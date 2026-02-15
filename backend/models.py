@@ -1,6 +1,6 @@
 """
 Shared data models for the verification pipeline.
-Used by RAG, SERP, evidence evaluator, and API response.
+Used by RAG, Tavily search, evidence evaluator, and API response.
 """
 
 from dataclasses import dataclass
@@ -12,12 +12,12 @@ Stance = Literal["supports", "refutes", "neutral"]
 
 @dataclass
 class EvidenceItem:
-    """A single evidence item from RAG or SERP (internal)."""
+    """A single evidence item from RAG or Tavily search (internal)."""
 
     title: str
     url: str
     snippet: str
-    source: str = ""  # e.g. "serp" or "rag" or domain
+    source: str = ""  # e.g. "tavily" or "rag" or domain
     score: float = 0.0
     stance: Optional[Stance] = None
 

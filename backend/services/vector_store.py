@@ -109,3 +109,83 @@ def delete_collection(collection_name: str) -> None:
         client.delete_collection(name=collection_name)
     except Exception as e:
         logger.warning("delete_collection %s: %s", collection_name, e)
+
+
+def add_documents_with_embeddings(
+    collection_name: str,
+    ids: List[str],
+    documents: List[str],
+    metadatas: List[Dict[str, Any]],
+    embeddings: List[List[float]],
+) -> None:
+    """
+    Add documents to a collection with precomputed embeddings.
+    ids, documents, metadatas, embeddings must be same length. Used by refresh job to avoid re-embedding.
+    """
+    if not ids or len(ids) != len(documents) or len(documents) != len(metadatas) or len(metadatas) != len(embeddings):
+        raise ValueError("ids, documents, metadatas, embeddings must be same non-empty length.")
+    client = _get_client()
+    coll = client.get_or_create_collection(
+        name=collection_name,
+        metadata={"hnsw:space": "cosine"},
+    )
+    clean_meta: List[Dict[str, Any]] = []
+    for m in metadatas:
+        clean_meta.append({k: (v if isinstance(v, (str, int, float, bool)) else str(v)) for k, v in (m or {}).items()})
+    coll.add(ids=ids, documents=documents, metadatas=clean_meta, embeddings=embeddings)
+
+
+def get_all(
+    collection_name: str,
+    include_embeddings: bool = True,
+) -> Dict[str, Any]:
+    """
+    Return all items in the collection. Keys: ids, documents, metadatas, embeddings (if include_embeddings).
+    If collection is missing or empty, returns empty lists for each key.
+    """
+    out: Dict[str, Any] = {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
+    try:
+        client = _get_client()
+        coll = client.get_collection(name=collection_name)
+    except Exception:
+        return out
+    n = coll.count()
+    if n == 0:
+        return out
+    include = ["documents", "metadatas"]
+    if include_embeddings:
+        include.append("embeddings")
+    result = coll.get(include=include)
+    ids_raw = result.get("ids")
+    out["ids"] = list(ids_raw) if ids_raw is not None else []
+    docs_raw = result.get("documents")
+    out["documents"] = list(docs_raw) if docs_raw is not None else []
+    metas_raw = result.get("metadatas")
+    out["metadatas"] = list(metas_raw) if metas_raw is not None else []
+    emb_raw = result.get("embeddings")
+    out["embeddings"] = [list(e) for e in emb_raw] if emb_raw is not None else []
+    if not include_embeddings:
+        out["embeddings"] = []
+    return out
+
+
+def clone_collection(src_name: str, dest_name: str) -> None:
+    """
+    Copy all data from src_name to dest_name, then delete src_name.
+    If dest_name exists it is deleted first. Empty source: create empty dest and delete src.
+    Used by refresh job to promote temp collection to live safely.
+    """
+    data = get_all(src_name, include_embeddings=True)
+    ids = data.get("ids") or []
+    documents = data.get("documents") or []
+    metadatas = data.get("metadatas") or []
+    embeddings = data.get("embeddings") or []
+    delete_collection(dest_name)
+    if not ids:
+        client = _get_client()
+        client.get_or_create_collection(name=dest_name, metadata={"hnsw:space": "cosine"})
+        logger.info("clone_collection: empty source, created empty %s", dest_name)
+    else:
+        add_documents_with_embeddings(dest_name, ids, documents, metadatas, embeddings)
+    delete_collection(src_name)
+    logger.info("clone_collection: %s -> %s, %s docs", src_name, dest_name, len(ids))

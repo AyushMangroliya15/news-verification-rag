@@ -41,6 +41,20 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/status")
+def status():
+    """Return system status including configured search provider."""
+    from backend.config import TAVILY_API_KEY
+    
+    has_tavily = bool(TAVILY_API_KEY)
+    
+    return {
+        "status": "ok",
+        "search_provider": "tavily",
+        "tavily_api_key": "configured" if has_tavily else "not configured",
+    }
+
+
 class VerifyRequest(BaseModel):
     """Request body for POST /verify."""
 

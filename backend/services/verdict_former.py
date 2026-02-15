@@ -8,7 +8,7 @@ from typing import List
 
 from openai import OpenAI
 
-from backend.config import OPENAI_API_KEY, OPENAI_LLM_MODEL
+from backend.config import CREDIBLE_DOMAINS, OPENAI_API_KEY, OPENAI_LLM_MODEL
 from backend.constants import (
     STANCE_NEUTRAL,
     STANCE_REFUTES,
@@ -16,6 +16,7 @@ from backend.constants import (
     Verdict,
 )
 from backend.models import Citation, EvidenceItem
+from backend.services.source_credibility import filter_credible_citations
 from backend.services.validation_rules import apply_validation_rules
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,21 @@ def form_verdict(
     """
     verdict = _decide_verdict(evidence, sufficient, has_conflict)
     citations = _evidence_to_citations(evidence)
+    credible_citations = filter_credible_citations(citations, CREDIBLE_DOMAINS)
+    # If no citations pass credibility filter, or if too few pass (< 3 or < 30% of total),
+    # fall back to showing all (avoid losing too many citations when we have evidence)
+    if not credible_citations:
+        citations = citations
+    elif len(credible_citations) < 3 and len(credible_citations) < len(citations) * 0.3:
+        # Too few credible citations relative to total - use all to preserve evidence diversity
+        logger.info(
+            "Credibility filter too restrictive: %d credible out of %d total citations, using all",
+            len(credible_citations),
+            len(citations),
+        )
+        citations = citations
+    else:
+        citations = credible_citations
     reasoning = _generate_reasoning(claim, verdict, evidence)
     allowed_urls = {e.url for e in evidence}
     verdict, reasoning, citations = apply_validation_rules(

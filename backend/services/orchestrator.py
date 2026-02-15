@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from backend.config import AGENTIC_LOOP_MAX_ITER, RAG_TOP_K
+from backend.config import AGENTIC_LOOP_MAX_ITER, RAG_TOP_K, RERANK_TOP_K
 from backend.models import Citation, EvidenceItem
 from backend.services.evidence_evaluator import (
     attach_stances,
@@ -15,6 +15,7 @@ from backend.services.evidence_evaluator import (
     is_sufficient,
 )
 from backend.services.rag_agent import retrieve as rag_retrieve
+from backend.services.reranker import rerank as rerank_evidence
 from backend.services.verdict_former import form_verdict
 from backend.services.web_agent import fetch_evidence as web_fetch_evidence
 
@@ -22,15 +23,43 @@ logger = logging.getLogger(__name__)
 
 
 def _merge_and_dedupe(web_items: List[EvidenceItem], rag_items: List[EvidenceItem]) -> List[EvidenceItem]:
-    """Merge evidence from WEB and RAG, deduplicate by URL."""
+    """
+    Merge evidence from WEB (Tavily) and RAG, deduplicate by URL, and filter homepage URLs.
+    Tavily returns article URLs by default, so we only filter RAG results for homepages.
+    """
+    from backend.services.url_utils import _is_homepage_url
+    
     seen: set[str] = set()
     out: List[EvidenceItem] = []
+    
+    logger.info("Merging evidence: %d Tavily items, %d RAG items", len(web_items), len(rag_items))
+    
+    # Log sources for debugging
+    tavily_urls = [item.url for item in web_items]
+    rag_urls = [item.url for item in rag_items]
+    logger.info("Tavily URLs: %s", tavily_urls[:5])  # First 5
+    logger.info("RAG URLs: %s", rag_urls[:5])  # First 5
+    
     for item in web_items + rag_items:
         url = (item.url or "").strip()
         if not url or url in seen:
             continue
+        
+        # Filter homepage URLs only for RAG results (Tavily returns article URLs by default)
+        if item.source == "rag" and _is_homepage_url(url):
+            logger.warning("Filtered homepage URL from RAG evidence: %s (source: %s)", url, item.source)
+            continue
+        
+        # Also check if it's a homepage regardless of source (safety check)
+        if _is_homepage_url(url):
+            logger.warning("Filtered homepage URL (unexpected source '%s'): %s", item.source, url)
+            continue
+        
         seen.add(url)
         out.append(item)
+        logger.debug("Added evidence item: %s (source: %s)", url, item.source)
+    
+    logger.info("After merge and dedupe: %d total evidence items", len(out))
     return out
 
 
@@ -75,6 +104,13 @@ def run_verification(claim: str, claim_id: str | None = None) -> Dict[str, Any]:
                     top_k = min(top_k + 5, 20)
                     use_current_only = True
                 continue
+
+            try:
+                # Reranker now filters homepages before reranking and uses hybrid scoring
+                evidence = rerank_evidence(claim, evidence, top_k=RERANK_TOP_K)
+                logger.info("After reranking: %d evidence items", len(evidence))
+            except Exception as e:
+                logger.warning("Reranker failed: %s; using evidence unchanged.", e)
 
             attach_stances(claim, evidence)
             sufficient = is_sufficient(evidence)
