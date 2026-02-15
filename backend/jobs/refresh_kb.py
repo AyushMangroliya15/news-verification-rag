@@ -1,5 +1,5 @@
 """
-Knowledge base refresh job: fetch top current-affairs from SERP, chunk, embed, upsert into ChromaDB.
+Knowledge base refresh job: fetch top current-affairs from Tavily, chunk, embed, upsert into ChromaDB.
 Designed to be run via cron every 24 hours (e.g. python -m backend.jobs.refresh_kb).
 Uses diverse queries, credible-first ordering, sentence-aware chunking, stable IDs, batched embed, and safe swap.
 """
@@ -10,7 +10,14 @@ import hashlib
 import logging
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+# Add project root to Python path to allow imports when running directly
+if __name__ == "__main__":
+    project_root = Path(__file__).resolve().parent.parent.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
 
 from backend.config import (
     CREDIBLE_DOMAINS,
@@ -22,7 +29,7 @@ from backend.config import (
 )
 from backend.constants import COLLECTION_CURRENT_AFFAIRS_24H, REFRESH_TEMP_COLLECTION
 from backend.services.embeddings import embed
-from backend.services.serp_client import search
+from backend.services.tavily_client import search
 from backend.services.source_credibility import _domain_from_url
 from backend.services.vector_store import (
     add_documents_with_embeddings,
@@ -68,19 +75,20 @@ def _chunk_text(
     return chunks
 
 
-def _gather_serp_results(
+def _gather_tavily_results(
     queries: List[str],
     num_per_query: int,
     credible_domains: set[str],
 ) -> List[Tuple[str, str, str]]:
     """
-    Run SERP for each query; return list of (url, title, snippet) with credible-first ordering and dedupe.
+    Run Tavily search for each query; return list of (url, title, snippet) with credible-first ordering and dedupe.
     """
     credible_list: List[Tuple[str, str, str]] = []
     other_list: List[Tuple[str, str, str]] = []
     for q in queries:
         try:
             results = search(query=q, num_results=num_per_query)
+            logger.info("Tavily returned %d results for refresh query: %s", len(results), q[:50])
             for r in results:
                 url = (r.get("url") or "").strip()
                 if not url:
@@ -94,7 +102,7 @@ def _gather_serp_results(
                 else:
                     other_list.append(entry)
         except Exception as e:
-            logger.warning("SERP failed for query %s: %s", q, e)
+            logger.warning("Tavily search failed for query %s: %s", q, e)
             continue
 
     seen_urls: set[str] = set()
@@ -104,12 +112,13 @@ def _gather_serp_results(
             continue
         seen_urls.add(url)
         ordered.append((url, title, snippet))
+    logger.info("Gathered %d unique results (%d credible, %d other)", len(ordered), len(credible_list), len(other_list))
     return ordered
 
 
 def run_refresh() -> int:
     """
-    Fetch SERP results for current-affairs queries (credible-first), chunk, embed in batches,
+    Fetch Tavily search results for current-affairs queries (credible-first), chunk, embed in batches,
     write to temp collection, then clone to live. Returns number of chunks stored.
     """
     now = datetime.now(timezone.utc).isoformat()[:10]
@@ -117,9 +126,9 @@ def run_refresh() -> int:
     num_per_query = REFRESH_NUM_RESULTS_PER_QUERY
     credible_domains = CREDIBLE_DOMAINS
 
-    ordered = _gather_serp_results(queries, num_per_query, credible_domains)
+    ordered = _gather_tavily_results(queries, num_per_query, credible_domains)
     if not ordered:
-        logger.warning("No SERP results; skipping refresh.")
+        logger.warning("No Tavily search results; skipping refresh.")
         return 0
 
     all_docs: List[Dict[str, Any]] = []
@@ -137,7 +146,7 @@ def run_refresh() -> int:
                         "title": title[:500],
                         "snippet": snippet[:1000],
                         "date": now,
-                        "source": "serp",
+                        "source": "tavily",
                     },
                 }
             )

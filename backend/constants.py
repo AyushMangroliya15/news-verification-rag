@@ -48,9 +48,11 @@ DEFAULT_CREDIBLE_DOMAINS: list[str] = [
     "nbcnews.com",
     "abcnews.go.com",
     "poynter.org",
+    "wikipedia.org",  # Credible source for factual/historical information
+    "britannica.com",  # Credible encyclopedia source
 ]
 
-# KB refresh: default SERP queries for current-affairs (diverse topics)
+# KB refresh: default Tavily search queries for current-affairs (diverse topics)
 DEFAULT_CURRENT_AFFAIRS_QUERIES: list[str] = [
     "today's top news",
     "breaking news today",

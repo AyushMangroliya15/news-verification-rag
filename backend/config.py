@@ -33,8 +33,6 @@ def _get_env_int(key: str, default: int) -> int:
 
 # API keys
 OPENAI_API_KEY: str | None = _get_env("OPENAI_API_KEY")
-SERP_API_KEY: str | None = _get_env("SERP_API_KEY")
-SERP_API_BASE_URL: str = _get_env("SERP_API_BASE_URL") or "https://serpapi.com/search"
 
 # Claim validation
 CLAIM_MAX_LENGTH: int = _get_env_int("CLAIM_MAX_LENGTH", 2000)
@@ -55,9 +53,10 @@ OPENAI_LLM_MODEL: str = _get_env("OPENAI_LLM_MODEL") or "gpt-4o-mini"
 # Optional: min sources for Supported/Refuted (can override in constants)
 MIN_SOURCES_FOR_VERDICT: int = _get_env_int("MIN_SOURCES_FOR_VERDICT", 1)
 
-# SERP
-SERP_NUM_RESULTS: int = _get_env_int("SERP_NUM_RESULTS", 10)
-SERP_REQUEST_TIMEOUT_SEC: int = _get_env_int("SERP_REQUEST_TIMEOUT_SEC", 15)
+# Tavily API: Search provider for web evidence (designed for AI/LLM applications)
+TAVILY_API_KEY: str | None = _get_env("TAVILY_API_KEY")
+TAVILY_NUM_RESULTS: int = _get_env_int("TAVILY_NUM_RESULTS", 10)
+TAVILY_REQUEST_TIMEOUT_SEC: int = _get_env_int("TAVILY_REQUEST_TIMEOUT_SEC", 15)
 
 # Reranker (cross-encoder on merged evidence)
 RERANK_MODEL: str = _get_env("RERANK_MODEL") or "cross-encoder/ms-marco-MiniLM-L-6-v2"
